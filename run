@@ -1,0 +1,149 @@
+#!/usr/bin/env php
+<?php
+$mqttHost = getenv("MQTT_HOST");
+if (!$mqttHost) {
+    echo "Please set MQTT_HOST environment variable\n";
+    exit(1);
+}
+$mqttPort = getEnvWithDefault("MQTT_PORT", 1883);
+
+$mqttUser = getenv("MQTT_USER");
+$mqttPass = getenv("MQTT_PASS");
+$mqttTopic = getEnvWithDefault("MQTT_PREFIX", "PrusaLink/");
+$mqttClientId = getEnvWithDefault("MQTT_CLIENT_ID", "PrusaLink2mqtt");
+
+$prusaLinkHost = getenv("PRUSALINK_HOST");
+if (!$prusaLinkHost) {
+    echo "Please set PRUSALINK_HOST environment variable\n";
+    exit(1);
+}
+$prusaLinkApiKey = getenv("PRUSALINK_API_KEY");
+if (!$prusaLinkApiKey) {
+    echo "Please set PRUSALINK_API_KEY environment variable\n";
+    exit(1);
+}
+$pollIntervall = getEnvWithDefault("POLL_INTERVALL", 15);
+
+
+if (!str_ends_with($mqttTopic, "/")) {
+    $mqttTopic .= "/";
+}
+
+$mqtt = new Mosquitto\Client($mqttClientId);
+
+$topics = [];
+
+$mqtt->connect($mqttHost, $mqttPort);
+
+$usedConfig = [
+    "mqttHost" => $mqttHost,
+    "mqttPort" => $mqttPort,
+    "mqttUser" => $mqttUser,
+    "mqttPass" => $mqttPass,
+    "mqttPrefix" => $mqttTopic,
+    "mqttClientId" => $mqttClientId,
+    "prusaLinkHost" => $prusaLinkHost,
+    "prusaLinkApiKey" => $prusaLinkApiKey,
+    "pollIntervall" => $pollIntervall,
+];
+
+$padLength = max(array_map("strlen", array_keys($usedConfig)));
+
+echo "Using the following config:\n";
+foreach ($usedConfig as $key => $value) {
+    echo str_pad($key, $padLength) . ": $value\n";
+}
+
+$ch = curl_init();
+$lastSend = 0;
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: " . $prusaLinkApiKey]);
+curl_setopt($ch, CURLOPT_TIMEOUT, $pollIntervall/3);
+
+while (true) {
+    $mqtt->loop(500);
+
+    if ($lastSend + $pollIntervall < time()) {
+        $lastSend = time();
+
+        foreach (["status", "info", "job"] as $endpoint) {
+            curl_setopt(
+                $ch,
+                CURLOPT_URL,
+                $prusaLinkHost . "/api/v1/" . $endpoint
+            );
+            $result = curl_exec($ch);
+            $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($http_status < 200 || $http_status > 299) {
+                $mqtt->publish($mqttTopic, "Offline", 2, true);
+                //delete all topics
+                foreach ($topics as $topic => $value) {
+                    $mqtt->publish($topic, "", 2, true);
+                }
+                $topics = [];
+
+                continue;
+            } else {
+                $mqtt->publish($mqttTopic, "Online", 2, true);
+            }
+
+            $result = json_decode($result, true);
+
+            if ($result === null) {
+                //delete all matching topics
+                foreach ($topics as $topic => $value) {
+                    if (str_starts_with($topic, $mqttTopic . $endpoint)) {
+                        $mqtt->publish($topic, "", 2, true);
+                    }
+                }
+            }
+
+            $result = makeNonNested($result);
+
+            foreach ($result as $key => $value) {
+                $mqtt->publish(
+                    $mqttTopic . $endpoint . "/" . $key,
+                    $value,
+                    2,
+                    true
+                );
+                $topics[$mqttTopic . $endpoint . "/" . $key] = true;
+            }
+        }
+    }
+}
+
+function getEnvWithDefault($key, $default)
+{
+    $value = getenv($key);
+    if ($value === false) {
+        return $default;
+    }
+    return $value;
+}
+
+function makeNonNestedRecursive(array &$out, $key, array $in)
+{
+    foreach ($in as $k => $v) {
+        if (is_array($v)) {
+            makeNonNestedRecursive($out, $key . $k . "/", $v);
+        } else {
+            $out[$key . $k] = $v;
+        }
+    }
+}
+
+function makeNonNested($in, $prefix = "")
+{
+    if (is_null($in)) {
+        return [];
+    }
+    if (is_scalar($in)) {
+        return [$prefix . $in];
+    }
+    $out = [];
+    makeNonNestedRecursive($out, $prefix, $in);
+    return $out;
+}
+
