@@ -32,6 +32,7 @@ if (!str_ends_with($mqttTopic, "/")) {
 $mqtt = new Mosquitto\Client($mqttClientId);
 
 $topics = [];
+$mqtt->setCredentials($mqttUser, $mqttPass);
 
 $mqtt->connect($mqttHost, $mqttPort);
 
