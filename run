@@ -69,7 +69,7 @@ try {
 
         if ($lastSend + $pollIntervall < time()) {
             $lastSend = time();
-
+            $dataBlob=[];
             foreach (["status", "info", "job"] as $endpoint) {
                 curl_setopt(
                     $ch,
@@ -92,6 +92,7 @@ try {
                 }
 
                 $result = json_decode($result, true);
+                $dataBlob[$endpoint]=$result;
 
                 if ($result === null) {
                     //delete all matching topics
@@ -114,6 +115,7 @@ try {
                     $topics[$mqttTopic . $endpoint . "/" . $key] = true;
                 }
             }
+            $mqtt->publish($mqttTopic,json_encode($dataBlob),2,false);
         }
     }
 }catch (Exception $e){
