@@ -79,7 +79,6 @@ try {
                 $result = curl_exec($ch);
                 $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 if ($http_status < 200 || $http_status > 299) {
-                    $mqtt->publish($mqttTopic, "Offline", 2, true);
                     //delete all topics
                     foreach ($topics as $topic => $value) {
                         $mqtt->publish($topic, "", 2, true);
@@ -87,8 +86,6 @@ try {
                     $topics = [];
 
                     continue;
-                } else {
-                    $mqtt->publish($mqttTopic, "Online", 2, true);
                 }
 
                 $result = json_decode($result, true);
