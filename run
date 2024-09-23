@@ -70,6 +70,7 @@ try {
         if ($lastSend + $pollIntervall < time()) {
             $lastSend = time();
             $dataBlob=[];
+            $online=true;
             foreach (["status", "info", "job"] as $endpoint) {
                 curl_setopt(
                     $ch,
@@ -84,7 +85,7 @@ try {
                         $mqtt->publish($topic, "", 2, true);
                     }
                     $topics = [];
-
+                    $online=false;
                     continue;
                 }
 
@@ -112,6 +113,7 @@ try {
                     $topics[$mqttTopic . $endpoint . "/" . $key] = true;
                 }
             }
+            $mqtt->publish($mqttTopic."/online",$online?"true":"false",2);
             $mqtt->publish($mqttTopic,json_encode($dataBlob),2,false);
         }
     }
