@@ -114,7 +114,7 @@ try {
                 }
             }
             $mqtt->publish($mqttTopic."/online",$online?"true":"false",2);
-            $mqtt->publish($mqttTopic,json_encode($dataBlob),2,false);
+            $mqtt->publish($mqttTopic.'/fullstate',json_encode($dataBlob),2,false);
         }
     }
 }catch (Exception $e){
