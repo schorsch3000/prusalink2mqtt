@@ -113,8 +113,8 @@ try {
                     $topics[$mqttTopic . $endpoint . "/" . $key] = true;
                 }
             }
-            $mqtt->publish($mqttTopic."/online",$online?"true":"false",2);
-            $mqtt->publish($mqttTopic.'/fullstate',json_encode($dataBlob),2,false);
+            $mqtt->publish($mqttTopic."online",$online?"true":"false",2);
+            $mqtt->publish($mqttTopic.'fullstate',json_encode($dataBlob),2,false);
         }
     }
 }catch (Exception $e){
